@@ -84,7 +84,7 @@ app.post("/zapier-callback", async (req, res) => {
 
   await bot.telegram.sendMessage(
     chatId,
-    "✅ *UUID found!*\n\nPhone: \`" + phone + "\`\nUUID: \`" + uuid + "\`",
+    "✅ *UUID found!*\n\nPhone: `" + phone + "`\nUUID: `" + uuid + "`",
     { parse_mode: "Markdown" }
   );
 
@@ -107,70 +107,3 @@ console.log("✅ Greenwheels bot running...");
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const SUPPORT_CHAT_ID = process.env.SUPPORT_CHAT_ID;
-
-// ─── Session store ─────────────────────────────────────────────────────────────
-const sessions = {};
-function getSession(chatId) {
-  if (!sessions[chatId]) sessions[chatId] = { country: null, issue: null };
-  return sessions[chatId];
-}
-function resetSession(chatId) {
-  sessions[chatId] = { country: null, issue: null };
-}
-
-// ─── Country config ────────────────────────────────────────────────────────────
-const COUNTRIES = {
-  kenya: {
-    label: "🇰🇪 Kenya",
-    currency: "KES",
-    support_number: "+254 700 000 000",
-    payment_methods: ["M-Pesa", "Airtel Money", "Visa/Mastercard"],
-  },
-  uganda: {
-    label: "🇺🇬 Uganda",
-    currency: "UGX",
-    support_number: "+256 700 000 000",
-    payment_methods: ["MTN Mobile Money", "Airtel Money", "Visa/Mastercard"],
-  },
-  ghana: {
-    label: "🇬🇭 Ghana",
-    currency: "GHS",
-    support_number: "+233 200 000 000",
-    payment_methods: ["MTN MoMo", "Vodafone Cash", "Visa/Mastercard"],
-  },
-};
-
-// ─── Keyboards ─────────────────────────────────────────────────────────────────
-const countryKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("🇰🇪 Kenya", "country_kenya")],
-  [Markup.button.callback("🇺🇬 Uganda", "country_uganda")],
-  [Markup.button.callback("🇬🇭 Ghana", "country_ghana")],
-]);
-
-const issueKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("💳 Incorrect charge", "issue_overcharge")],
-  [Markup.button.callback("❌ Payment failed", "issue_failed")],
-  [Markup.button.callback("🔁 Request a refund", "issue_refund")],
-  [Markup.button.callback("📄 Need a receipt / invoice", "issue_receipt")],
-  [Markup.button.callback("🔒 Account suspended", "issue_suspended")],
-  [Markup.button.callback("❓ Something else", "issue_other")],
-]);
-
-const doneKeyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("✅ This helped — close", "close")],
-  [Markup.button.callback("🙋 Speak to an agent", "escalate")],
-  [Markup.button.callback("🔙 Main menu", "main_menu")],
-]);
-
-// ─── Issue responses ───────────────────────────────────────────────────────────
-function getIssueResponse(issue, country) {
-  const c = COUNTRIES[country];
-  const methods = c.payment_methods.map((m) => `• ${m}`).join("\n");
-
-  const responses = {
-    overcharge: `💳 *Incorrect Charge*\n\nSorry to hear this happened.\n\n*Steps to resolve:*\n1. Open the Greenwheels app → *My Rides*\n2. Find the ride and note the date, time & amount charged\n3. Compare it with your booking confirmation\n\nIf there's a discrepancy, we'll investigate and refund the difference within *3–5 business days*.\n\n📞 ${c.label} support: \`${c.support_number}\``,
-
-    failed: `❌ *Payment Failed*\n\n*Accepted payment methods in ${c.label}:*\n${methods}\n\n*Common fixes:*\n• Check your mobile money balance\n• Make sure your card hasn't expired\n• Try a different payment method\n• Confirm your number is active and
