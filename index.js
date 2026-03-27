@@ -50,7 +50,8 @@ bot.on("text", async (ctx) => {
   await ctx.reply("🔍 Looking up your UUID, please wait...");
 
   try {
-    await fetch("https://hooks.zapier.com/hooks/catch/15146927/unmxgq5/", {
+    console.log("Sending to Zapier:", text);
+    const zapRes = await fetch("https://hooks.zapier.com/hooks/catch/15146927/unmxgq5/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -58,6 +59,9 @@ bot.on("text", async (ctx) => {
         callback_url: "https://divine-appreciation-production.up.railway.app/zapier-callback",
       }),
     });
+    const zapBody = await zapRes.text();
+    console.log("Zapier response status:", zapRes.status);
+    console.log("Zapier response body:", zapBody);
   } catch (err) {
     console.error("Error calling Zapier:", err);
     ctx.reply("❌ Could not reach our system. Please try again in a moment.");
