@@ -82,15 +82,33 @@ app.use(express.json());
 // ─── Zapier callback ───────────────────────────────────────────────────────────
 app.post("/zapier-callback", async (req, res) => {
   console.log("Zapier callback received:", req.body);
-  const { phone, uuid } = req.body;
-  if (!phone || !uuid) return res.status(400).json({ error: "Missing phone or uuid" });
+  const { phone, uuid, status } = req.body;
+
+  if (!phone) return res.status(400).json({ error: "Missing phone" });
+
   const chatId = pending[phone];
   if (!chatId) return res.status(404).json({ error: "No pending request" });
-  await bot.telegram.sendMessage(
-    chatId,
-    "✅ *UUID found!*\n\nPhone: `" + phone + "`\nUUID: `" + uuid + "`",
-    { parse_mode: "Markdown" }
-  );
+
+  if (status === "not_found") {
+    await bot.telegram.sendMessage(
+      chatId,
+      "❌ *No account found*\n\nWe couldn't find a Greenwheels account linked to `" + phone + "`.\n\nPlease check the number and try again.",
+      { parse_mode: "Markdown" }
+    );
+  } else if (uuid) {
+    await bot.telegram.sendMessage(
+      chatId,
+      "✅ *UUID found!*\n\nPhone: `" + phone + "`\nUUID: `" + uuid + "`",
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    await bot.telegram.sendMessage(
+      chatId,
+      "⚠️ Something went wrong with the lookup. Please try again.",
+      { parse_mode: "Markdown" }
+    );
+  }
+
   delete pending[phone];
   res.json({ success: true });
 });
