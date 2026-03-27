@@ -7,6 +7,7 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+const RAILWAY_URL = process.env.RAILWAY_PUBLIC_DOMAIN;
 
 // ─── Pending requests store ────────────────────────────────────────────────────
 const pending = {};
@@ -56,7 +57,7 @@ bot.on("text", async (ctx) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         phone: text,
-        callback_url: "https://divine-appreciation-production.up.railway.app/zapier-callback",
+        callback_url: `https://${RAILWAY_URL}/zapier-callback`,
       }),
     });
     const zapBody = await zapRes.text();
@@ -106,8 +107,21 @@ app.listen(PORT, () => {
   console.log("✅ Express server running on port " + PORT);
 });
 
-bot.launch();
-console.log("✅ Greenwheels bot running...");
+if (RAILWAY_URL) {
+  const WEBHOOK_PATH = "/bot-webhook";
+  const WEBHOOK_URL = `https://${RAILWAY_URL}${WEBHOOK_PATH}`;
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+  app.use(bot.webhookCallback(WEBHOOK_PATH));
+
+  bot.telegram.setWebhook(WEBHOOK_URL).then(() => {
+    console.log("✅ Webhook set:", WEBHOOK_URL);
+  });
+
+  console.log("✅ Greenwheels bot running via webhook...");
+} else {
+  bot.launch();
+  console.log("✅ Greenwheels bot running via polling...");
+
+  process.once("SIGINT", () => bot.stop("SIGINT"));
+  process.once("SIGTERM", () => bot.stop("SIGTERM"));
+}
