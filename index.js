@@ -102,16 +102,17 @@ app.get("/", (req, res) => {
   res.send("✅ Greenwheels bot is running.");
 });
 
-// ─── Start Express + Bot ───────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log("✅ Express server running on port " + PORT);
-});
-
+// ─── Start ─────────────────────────────────────────────────────────────────────
 if (RAILWAY_URL) {
+  // Webhook mode — register BEFORE app.listen
   const WEBHOOK_PATH = "/bot-webhook";
   const WEBHOOK_URL = `https://${RAILWAY_URL}${WEBHOOK_PATH}`;
 
   app.use(bot.webhookCallback(WEBHOOK_PATH));
+
+  app.listen(PORT, () => {
+    console.log("✅ Express server running on port " + PORT);
+  });
 
   bot.telegram.setWebhook(WEBHOOK_URL).then(() => {
     console.log("✅ Webhook set:", WEBHOOK_URL);
@@ -119,6 +120,11 @@ if (RAILWAY_URL) {
 
   console.log("✅ Greenwheels bot running via webhook...");
 } else {
+  // Polling mode for local dev
+  app.listen(PORT, () => {
+    console.log("✅ Express server running on port " + PORT);
+  });
+
   bot.launch();
   console.log("✅ Greenwheels bot running via polling...");
 
