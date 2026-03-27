@@ -9,7 +9,7 @@ const RAILWAY_URL = process.env.RAILWAY_PUBLIC_DOMAIN;
 // ─── Pending requests store ────────────────────────────────────────────────────
 const pending = {};
 
-// ─── Main menu ─────────────────────────────────────────────────────────────────
+// ─── Bot handlers ──────────────────────────────────────────────────────────────
 bot.start((ctx) => {
   console.log("✅ /start received from", ctx.from.id);
   ctx.reply(
@@ -20,7 +20,6 @@ bot.start((ctx) => {
   );
 });
 
-// ─── Button pressed → ask for phone number ─────────────────────────────────────
 bot.action("get_uuid", (ctx) => {
   ctx.answerCbQuery();
   ctx.reply(
@@ -29,16 +28,12 @@ bot.action("get_uuid", (ctx) => {
   );
 });
 
-// ─── Receive phone number → POST to Zapier ─────────────────────────────────────
 bot.on("text", async (ctx) => {
   const text = ctx.message.text.trim();
   if (text.startsWith("/")) return;
 
   if (!/^\+?[\d\s\-]{7,15}$/.test(text)) {
-    ctx.reply(
-      "⚠️ That doesn't look like a valid phone number.\n\nPlease try again e.g. *+254712345678*",
-      { parse_mode: "Markdown" }
-    );
+    ctx.reply("⚠️ Invalid number. Try e.g. *+254712345678*", { parse_mode: "Markdown" });
     return;
   }
 
@@ -68,31 +63,34 @@ bot.on("text", async (ctx) => {
 // ─── Express app ───────────────────────────────────────────────────────────────
 const app = express();
 
-// Webhook MUST be registered before express.json()
-if (RAILWAY_URL) {
-  const WEBHOOK_PATH = "/bot-webhook";
-  app.use(bot.webhookCallback(WEBHOOK_PATH));
-}
+// Raw body logger — must be first
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path}`);
+  next();
+});
 
-// JSON parser for all other routes
+// Webhook handler — before express.json()
+const WEBHOOK_PATH = "/bot-webhook";
+app.use(WEBHOOK_PATH, express.json(), (req, res) => {
+  console.log("📨 Webhook body:", JSON.stringify(req.body));
+  bot.handleUpdate(req.body, res);
+});
+
+// JSON for all other routes
 app.use(express.json());
 
 // ─── Zapier callback ───────────────────────────────────────────────────────────
 app.post("/zapier-callback", async (req, res) => {
   console.log("Zapier callback received:", req.body);
   const { phone, uuid } = req.body;
-
   if (!phone || !uuid) return res.status(400).json({ error: "Missing phone or uuid" });
-
   const chatId = pending[phone];
-  if (!chatId) return res.status(404).json({ error: "No pending request for this phone" });
-
+  if (!chatId) return res.status(404).json({ error: "No pending request" });
   await bot.telegram.sendMessage(
     chatId,
     "✅ *UUID found!*\n\nPhone: `" + phone + "`\nUUID: `" + uuid + "`",
     { parse_mode: "Markdown" }
   );
-
   delete pending[phone];
   res.json({ success: true });
 });
@@ -104,7 +102,7 @@ app.get("/", (req, res) => res.send("✅ Greenwheels bot is running."));
 app.listen(PORT, () => console.log("✅ Express running on port " + PORT));
 
 if (RAILWAY_URL) {
-  const WEBHOOK_URL = `https://${RAILWAY_URL}/bot-webhook`;
+  const WEBHOOK_URL = `https://${RAILWAY_URL}${WEBHOOK_PATH}`;
   bot.telegram.setWebhook(WEBHOOK_URL).then(() => {
     console.log("✅ Webhook set:", WEBHOOK_URL);
   });
