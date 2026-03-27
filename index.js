@@ -3,9 +3,6 @@ const { Telegraf, Markup } = require("telegraf");
 const express = require("express");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const app = express();
-app.use(express.json());
-
 const PORT = process.env.PORT || 3000;
 const RAILWAY_URL = process.env.RAILWAY_PUBLIC_DOMAIN;
 
@@ -14,6 +11,7 @@ const pending = {};
 
 // ─── Main menu ─────────────────────────────────────────────────────────────────
 bot.start((ctx) => {
+  console.log("✅ /start received from", ctx.from.id);
   ctx.reply(
     "👋 Welcome to Greenwheels!\n\nWhat would you like to do?",
     Markup.inlineKeyboard([
@@ -34,12 +32,11 @@ bot.action("get_uuid", (ctx) => {
 // ─── Receive phone number → POST to Zapier ─────────────────────────────────────
 bot.on("text", async (ctx) => {
   const text = ctx.message.text.trim();
-
   if (text.startsWith("/")) return;
 
   if (!/^\+?[\d\s\-]{7,15}$/.test(text)) {
     ctx.reply(
-      "⚠️ That doesn't look like a valid phone number.\n\nPlease try again with your country code e.g. *+254712345678*",
+      "⚠️ That doesn't look like a valid phone number.\n\nPlease try again e.g. *+254712345678*",
       { parse_mode: "Markdown" }
     );
     return;
@@ -47,7 +44,6 @@ bot.on("text", async (ctx) => {
 
   const chatId = ctx.chat.id;
   pending[text] = chatId;
-
   await ctx.reply("🔍 Looking up your UUID, please wait...");
 
   try {
@@ -60,32 +56,36 @@ bot.on("text", async (ctx) => {
         callback_url: `https://${RAILWAY_URL}/zapier-callback`,
       }),
     });
-    const zapBody = await zapRes.text();
-    console.log("Zapier response status:", zapRes.status);
-    console.log("Zapier response body:", zapBody);
+    console.log("Zapier status:", zapRes.status);
+    console.log("Zapier body:", await zapRes.text());
   } catch (err) {
-    console.error("Error calling Zapier:", err);
-    ctx.reply("❌ Could not reach our system. Please try again in a moment.");
+    console.error("Zapier error:", err);
+    ctx.reply("❌ Could not reach our system. Please try again.");
     delete pending[text];
   }
 });
 
-// ─── Zapier callback endpoint ──────────────────────────────────────────────────
+// ─── Express app ───────────────────────────────────────────────────────────────
+const app = express();
+
+// Webhook MUST be registered before express.json()
+if (RAILWAY_URL) {
+  const WEBHOOK_PATH = "/bot-webhook";
+  app.use(bot.webhookCallback(WEBHOOK_PATH));
+}
+
+// JSON parser for all other routes
+app.use(express.json());
+
+// ─── Zapier callback ───────────────────────────────────────────────────────────
 app.post("/zapier-callback", async (req, res) => {
   console.log("Zapier callback received:", req.body);
-
   const { phone, uuid } = req.body;
 
-  if (!phone || !uuid) {
-    return res.status(400).json({ error: "Missing phone or uuid" });
-  }
+  if (!phone || !uuid) return res.status(400).json({ error: "Missing phone or uuid" });
 
   const chatId = pending[phone];
-
-  if (!chatId) {
-    console.warn("No pending request for phone:", phone);
-    return res.status(404).json({ error: "No pending request for this phone" });
-  }
+  if (!chatId) return res.status(404).json({ error: "No pending request for this phone" });
 
   await bot.telegram.sendMessage(
     chatId,
@@ -98,36 +98,20 @@ app.post("/zapier-callback", async (req, res) => {
 });
 
 // ─── Health check ──────────────────────────────────────────────────────────────
-app.get("/", (req, res) => {
-  res.send("✅ Greenwheels bot is running.");
-});
+app.get("/", (req, res) => res.send("✅ Greenwheels bot is running."));
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
+app.listen(PORT, () => console.log("✅ Express running on port " + PORT));
+
 if (RAILWAY_URL) {
-  // Webhook mode — register BEFORE app.listen
-  const WEBHOOK_PATH = "/bot-webhook";
-  const WEBHOOK_URL = `https://${RAILWAY_URL}${WEBHOOK_PATH}`;
-
-  app.use(bot.webhookCallback(WEBHOOK_PATH));
-
-  app.listen(PORT, () => {
-    console.log("✅ Express server running on port " + PORT);
-  });
-
+  const WEBHOOK_URL = `https://${RAILWAY_URL}/bot-webhook`;
   bot.telegram.setWebhook(WEBHOOK_URL).then(() => {
     console.log("✅ Webhook set:", WEBHOOK_URL);
   });
-
-  console.log("✅ Greenwheels bot running via webhook...");
+  console.log("✅ Bot running via webhook...");
 } else {
-  // Polling mode for local dev
-  app.listen(PORT, () => {
-    console.log("✅ Express server running on port " + PORT);
-  });
-
   bot.launch();
-  console.log("✅ Greenwheels bot running via polling...");
-
+  console.log("✅ Bot running via polling...");
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 }
